@@ -1,11 +1,3 @@
-" A better response to recover prompts
-" Author: Timmy Yao
-" Version: 0.1.0
-" Last Modified: 29 December 2017
-"
-" This plugin provides an automatic response to swapexists prompts, deleting
-" it or showing a diff.
-
 function! recover#swapexists()
 	" check if it's because the file is open
 	let handled = recover#check_loaded(expand('%'))
