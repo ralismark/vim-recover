@@ -51,7 +51,7 @@ function! recover#swapcheck()
 		if diff
 			break
 		endif
-		let diff = getbufline(orig_buf, line) !=# getbufline(orig_buf, line)
+		let diff = getbufline(recov_buf, line) !=# getbufline(orig_buf, line)
 	endfor
 
 	if diff
