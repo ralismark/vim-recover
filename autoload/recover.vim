@@ -1,6 +1,6 @@
 function! recover#swapexists()
 	" check if it's because the file is open
-	let handled = recover#check_loaded(expand('%'))
+	let handled = recover#check_loaded(expand('%:p'))
 	if !empty(handled)
 		let v:swapchoice = handled
 		return
@@ -8,8 +8,8 @@ function! recover#swapexists()
 
 	" Old Swapfile - kill it
 	if getftime(v:swapname) < getftime(expand('%'))
-		call delete(v:swapname)
 		call confirm("Swapfile older than on-disk file - deleting it")
+		call delete(v:swapname)
 		let v:swapchoice = 'e'
 		return
 	endif
@@ -17,13 +17,9 @@ function! recover#swapexists()
 	" Actual swapexists
 	" check difference between recovered file and original file
 	" if same, delete swap
-	let v:swapchoice = 'r'
-	augroup swap_response
-		au BufWinEnter * call recover#swapcheck()
-		au BufWinEnter * augroup swap_response | autocmd! | augroup END
-	augroup END
-
+	au BufWinEnter * ++once call recover#swapcheck()
 	let b:swapname = v:swapname
+	let v:swapchoice = 'r'
 endfunction!
 
 " check recovered and original
@@ -64,34 +60,38 @@ function! recover#swapcheck()
 	endif
 endfunction
 
+" gets a list of opened files, for use in recover#check_loaded
+function! recover#list_opened_files()
+	let loaded_bufnrs = filter(range(1, bufnr("$")), "bufloaded(v:val)")
+	let opened_paths = map(loaded_bufnrs, "expand('#' . v:val . ':p')")
+	return getpid() . "\n" . join(opened_paths, "\n")
+endfunction
+
 " checks if the file is already loaded (in another instance)
 function! recover#check_loaded(filename)
-	let fname_esc = substitute(a:filename, "'", "''", "g")
-
-	let servers = has('nvim') ? systemlist(['nvr', '--serverlist']) : split(serverlist(), "\n")
+	let servers = has('nvim')
+		\ ? systemlist(['nvr', '--serverlist'])
+		\ : split(serverlist(), "\n")
 	if type(servers) != v:t_list
 		return '' " nvr failed
 	endif
 
-	" required for nvr to deduplicate things
-	call uniq(servers)
-
-	for server in servers
+	" nvr can duplicate servers
+	for server in uniq(servers)
 		" Skip ourselves.
 		if server ==? v:servername
 			continue
 		endif
 
-		" Check if this server is editing our file.
-		let opened = 0
-		if has('nvim')
-			let opened = +system(['nvr', '--servername', server, '--remote-expr', "bufloaded('" . fname_esc . "')"])
-		else
-			let opened = remote_expr(server, "bufloaded('" . fname_esc . "')")
-		endif
-		if opened
+		" Get all files that a server has open
+		let remote_exec_output = has('nvim')
+			\ ? system(['nvr', '--servername', server, '--remote-expr', "recover#list_opened_files()"])
+			\ : remote_expr(server, "recover#list_opened_files()")
+		" first line is pid, the rest are paths
+		let lines = split(remote_exec_output, "\n")
+		if index(lines[1:], a:filename) >= 0
 			" Tell the user what is happening.
-			call confirm("File is being edited by " . server, '', 1, 'E')
+			call confirm("File is being edited by " . server . " (pid " . lines[0] . ")", '', 1, 'E')
 			return 'q'
 		endif
 	endfor
