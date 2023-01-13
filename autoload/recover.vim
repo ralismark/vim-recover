@@ -1,16 +1,22 @@
 function! recover#swapexists()
+	let filename = expand("%:p")
+
 	" check if it's because the file is open
-	let handled = recover#check_loaded(expand('%:p'))
+	let handled = recover#check_loaded(v:swapname, filename)
 	if !empty(handled)
 		let v:swapchoice = handled
 		return
 	endif
 
-	" Old Swapfile - kill it
-	if getftime(v:swapname) < getftime(expand('%'))
+	let ftime = getftime(filename)
+
+	if getftime(v:swapname) < ftime " Old Swapfile - kill it
 		call confirm("Swapfile older than on-disk file - deleting it")
 		call delete(v:swapname)
 		let v:swapchoice = 'e'
+		return
+	elseif ftime == -1 " File does not exist, nothing to diff
+		let v:swapchoice = 'r'
 		return
 	endif
 
@@ -60,40 +66,17 @@ function! recover#swapcheck()
 	endif
 endfunction
 
-" gets a list of opened files, for use in recover#check_loaded
-function! recover#list_opened_files()
-	let loaded_bufnrs = filter(range(1, bufnr("$")), "bufloaded(v:val)")
-	let opened_paths = map(loaded_bufnrs, "expand('#' . v:val . ':p')")
-	return getpid() . "\n" . join(opened_paths, "\n")
-endfunction
-
 " checks if the file is already loaded (in another instance)
-function! recover#check_loaded(filename)
-	let servers = has('nvim')
-		\ ? systemlist(['nvr', '--serverlist'])
-		\ : split(serverlist(), "\n")
-	if type(servers) != v:t_list
-		return '' " nvr failed
-	endif
-
-	" nvr can duplicate servers
-	for server in uniq(servers)
-		" Skip ourselves.
-		if server ==? v:servername
-			continue
-		endif
-
-		" Get all files that a server has open
-		let remote_exec_output = has('nvim')
-			\ ? system(['nvr', '--servername', server, '--remote-expr', "recover#list_opened_files()"])
-			\ : remote_expr(server, "recover#list_opened_files()")
-		" first line is pid, the rest are paths
-		let lines = split(remote_exec_output, "\n")
-		if index(lines[1:], a:filename) >= 0
-			" Tell the user what is happening.
-			call confirm("File is being edited by " . server . " (pid " . lines[0] . ")", '', 1, 'E')
+function! recover#check_loaded(swapname, filename)
+	return ''
+	if exists("*swapinfo") && has("unix")
+		let si = swapinfo(a:swapname)
+		if isdirectory("/proc/" . si.pid)
+			call confirm("File is being edited by another instance! (pid " . si.pid . ")", '', 1, 'E')
 			return 'q'
 		endif
-	endfor
+		" TODO windows support
+		" TODO try open the existing instance? or some hook to do that?
+	endif
 	return ''
 endfunction
