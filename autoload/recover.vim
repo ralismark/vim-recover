@@ -68,7 +68,6 @@ endfunction
 
 " checks if the file is already loaded (in another instance)
 function! recover#check_loaded(swapname, filename)
-	return ''
 	if exists("*swapinfo") && has("unix")
 		let si = swapinfo(a:swapname)
 		if isdirectory("/proc/" . si.pid)
